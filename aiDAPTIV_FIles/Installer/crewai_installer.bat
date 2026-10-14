@@ -1,21 +1,13 @@
 @echo off
 setlocal EnableExtensions
-title CrewAI - Create a Crew Manually (aiDAPTIV KV-Cache)
+title CrewAI - Create Crew Project (aiDAPTIV KV-Cache)
 
 rem ======================================================================
 rem  create_crew_aidaptiv.bat
-rem  Automates "Way 2: Create a crew manually" from the
-rem  CrewAI User Manual - aiDAPTIV KV-Cache Integration Edition.
-rem
-rem    Part 1   : check Python / uv, install CrewAI 1.15.23
-rem    Step 1-2 : crewai create crew <name>   (wizard answers are automated)
-rem    Step 4   : put the aiDAPTIV llm block into agents\*.jsonc
-rem               and pin crewai[tools]==1.15.23 in pyproject.toml
-rem    (stops here - crewai install / crewai run are NOT executed)
-rem
-rem  Run it from the folder where the new project folder should be created.
-rem  (The questions, the server check and the file edit are done by the
-rem   PowerShell section at the bottom of this file.)
+rem  Creates a CrewAI crew project configured for the aiDAPTIV KV-Cache
+rem  endpoint. Run it from the folder where the project should be created.
+rem  The prompts, server check and file edits are handled by the PowerShell
+rem  section at the bottom of this file.
 rem ======================================================================
 
 set "BATFILE=%~f0"
@@ -30,8 +22,8 @@ set "CLOG=%TEMP%\aid_crew_create.log"
 
 echo.
 echo  ============================================================
-echo    CrewAI  -  Create a Crew Manually  (aiDAPTIV KV-Cache)
-echo    CrewAI version used by this manual: %CREWAI_VER%
+echo    CrewAI  -  Create Crew Project  (aiDAPTIV KV-Cache)
+echo    CrewAI version: %CREWAI_VER%
 echo  ============================================================
 echo    Project will be created in: %CD%
 echo.
@@ -51,11 +43,11 @@ if errorlevel 1 goto :py_unsupported
 for /f "delims=" %%V in ('python --version 2^>^&1') do echo        OK - %%V
 goto :py_done
 :py_missing
-echo        Python was not found on PATH. uv will download Python 3.13 for CrewAI.
+echo        Python was not found on PATH. uv will provide Python 3.13 for CrewAI.
 set "PYARG=--python 3.13"
 goto :py_done
 :py_unsupported
-echo        No usable default Python 3.10 - 3.13 found. uv will use Python 3.13.
+echo        No supported Python version (3.10 to 3.13) found. uv will use Python 3.13.
 set "PYARG=--python 3.13"
 :py_done
 
@@ -65,7 +57,7 @@ rem ----------------------------------------------------------------------
 set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 where uv >nul 2>&1
 if not errorlevel 1 goto :uv_ok
-echo        uv not found - installing it now (official installer from the manual)...
+echo        uv not found. Installing uv...
 powershell -NoProfile -ExecutionPolicy ByPass -Command "irm https://astral.sh/uv/install.ps1 | iex"
 set "PATH=%USERPROFILE%\.local\bin;%USERPROFILE%\.cargo\bin;%PATH%"
 where uv >nul 2>&1
@@ -82,18 +74,18 @@ echo  [3/6] Checking CrewAI %CREWAI_VER%
 rem ----------------------------------------------------------------------
 uv tool list 2>nul | findstr /B /C:"crewai v%CREWAI_VER%" >nul
 if not errorlevel 1 goto :crewai_have
-echo        CrewAI %CREWAI_VER% not installed - installing (this can take a few minutes)...
+echo        CrewAI %CREWAI_VER% is not installed. Installing (this may take a few minutes)...
 uv tool install crewai==%CREWAI_VER% %PYARG% --force
 if not errorlevel 1 goto :crewai_have
-echo        First attempt failed - retrying with Python 3.13...
+echo        Installation failed. Retrying with Python 3.13...
 uv tool install crewai==%CREWAI_VER% --python 3.13 --force
 if not errorlevel 1 goto :crewai_have
 echo.
 echo  [ERROR] CrewAI %CREWAI_VER% could not be installed. See the messages above.
 goto :fail
 :crewai_have
-echo        Note: adding uv's tool folder to your user PATH permanently
-echo              (uv tool update-shell) so crewai also works in new terminals.
+echo        Adding the uv tool directory to the user PATH so that crewai is
+echo        available in new terminals.
 uv tool update-shell >nul 2>&1
 for /f "delims=" %%B in ('uv tool dir --bin 2^>nul') do set "PATH=%%B;%PATH%"
 crewai version >nul 2>&1
@@ -143,7 +135,7 @@ del "%AID_ANS%" >nul 2>&1
 if not "%RC%"=="0" goto :create_failed
 rem If the folder already exists, crewai asks "Override? [y/N]", eats the piped
 rem answers, prints "Cancelled." and still exits 0. The "folder already exists"
-rem check in step 4 is the main guard; this catches anything that slips past it,
+rem check in step [4/6] is the main guard; this catches anything that slips past it,
 rem so the folder search below can never pick up (and edit) an older project.
 findstr /C:"Cancelled." "%CLOG%" >nul 2>&1
 if errorlevel 1 goto :created
@@ -166,35 +158,34 @@ goto :fail
 set "AID_PROJDIR=%CD%\%FOLDER%"
 echo        OK - created: %AID_PROJDIR%
 
-echo        Adding the aiDAPTIV llm block to agents\*.jsonc (Step 4), pinning CrewAI in
-echo        pyproject.toml and checking crew.jsonc...
+echo        Configuring the aiDAPTIV llm block in agents\*.jsonc, pinning the CrewAI
+echo        version in pyproject.toml and validating crew.jsonc...
 set "AID_MODE=apply"
 call :runps
 if not errorlevel 1 goto :applied
 echo.
 echo  [ERROR] Could not configure the aiDAPTIV endpoint.
-echo          Edit agents\*.jsonc by hand using Part 2 of the manual.
+echo          Add the llm block to agents\*.jsonc manually.
 goto :fail
 :applied
 
 echo.
 echo  ============================================================
-echo    DONE - your aiDAPTIV crew project folder is ready
+echo    COMPLETE - the aiDAPTIV crew project is ready
 echo  ============================================================
 echo    Folder : %AID_PROJDIR%
 echo.
-echo    Nothing was installed or run inside the project.
-echo    When you are ready, run these yourself (from the manual):
+echo    No dependencies were installed and the crew was not run.
+echo    To install and run the crew:
 echo.
 echo        cd "%AID_PROJDIR%"
 echo        crewai install
 echo        crewai run
 echo.
-echo    "memory": false is set in crew.jsonc (as the manual requires).
-echo    pyproject.toml is pinned to crewai[tools]==%CREWAI_VER%, so
-echo    crewai install uses the same CrewAI version as this manual.
-echo    After a run, look for your offload_folder_name under the
-echo    aiDAPTIV NVMe cache root (Part 4 of the manual).
+echo    crew.jsonc has "memory": false.
+echo    pyproject.toml is pinned to crewai[tools]==%CREWAI_VER%.
+echo    After a run, the KV cache is stored under the offload_folder_name
+echo    folder in the aiDAPTIV NVMe cache root.
 echo.
 call :cleanup
 pause
@@ -270,17 +261,17 @@ if ($env:AID_MODE -eq 'ask') {
         break
     }
     Write-Host ''
-    Write-Host '        -- Agent (Step 2.1 of the manual) --'
-    Write-Host '        Tip: use {placeholder} for values you want to change at run time.'
+    Write-Host '        -- Agent --'
+    Write-Host '        Use {placeholder} for values that should be supplied at run time.'
     $role  = Ask 'Role' 'researcher'
     $goal  = Ask 'Goal' 'Find comprehensive information about a given topic'
     $back  = Ask 'Backstory' 'You find the most relevant information and present it clearly.'
     Write-Host ''
-    Write-Host '        -- Task (Step 2.6 of the manual) --'
+    Write-Host '        -- Task --'
     $tdesc = Ask 'Task description' 'explainer'
     $tout  = Ask 'Expected output' 'explain in simple terms'
     Write-Host ''
-    Write-Host '        -- aiDAPTIV server (Part 2 of the manual) --'
+    Write-Host '        -- aiDAPTIV server --'
     $url = Ask 'Server base_url' 'http://localhost:8080/v1'
     # Offer the name the server really reports (llama-server without --alias
     # reports the .gguf file name, not "gemma-4").
@@ -291,7 +282,7 @@ if ($env:AID_MODE -eq 'ask') {
         Write-Host ('        Server is up. Models served: ' + ($served -join ', '))
         $defModel = $served[0]
     } else {
-        Write-Host '        Server is not reachable right now - type the model name it will serve.'
+        Write-Host '        Server is not reachable. Enter the model name it will serve.'
         $defModel = 'gemma-4'
     }
     while ($true) {
@@ -328,8 +319,8 @@ if ($env:AID_MODE -eq 'check') {
             Write-Host '               agents\*.jsonc to the exact name above.'
         }
     } catch {
-        Write-Host '        [WARN] The server did not answer. Start the aiDAPTIV middleware / llama.cpp'
-        Write-Host '               server before the crew runs. The project will still be created.'
+        Write-Host '        [WARN] The server did not respond. Start the aiDAPTIV middleware and'
+        Write-Host '               llama.cpp server before running the crew. Project creation will continue.'
     }
     exit 0
 }
@@ -375,7 +366,7 @@ if ($env:AID_MODE -eq 'apply') {
     }
 
     # pyproject.toml: the wizard writes crewai[tools]>=X,<2.0.0, so crewai install
-    # would pull the newest 1.x. Pin it to the version this manual was tested with.
+    # would pull the newest 1.x. Pin it to the tested version.
     $pp = Join-Path $proj 'pyproject.toml'
     $p = [IO.File]::ReadAllText($pp)
     $depPat = '"crewai\[tools\][^"]*"'
@@ -391,13 +382,13 @@ if ($env:AID_MODE -eq 'apply') {
     if ([regex]::IsMatch($c, $memTrue)) {
         $c = [regex]::Replace($c, $memTrue, '${1}false')
         [IO.File]::WriteAllText($cp, $c, $utf8)
-        Write-Host '        Fixed: "memory" set to false in crew.jsonc'
+        Write-Host '        Updated: "memory" set to false in crew.jsonc'
     }
     $co = (Strip-Comments $c) | ConvertFrom-Json
     if ($co.memory -ne $false) { Fail 'crew.jsonc does not contain "memory": false' }
     if (@($co.agents).Count -lt 1 -or @($co.tasks).Count -lt 1) { Fail 'crew.jsonc has no agents or no tasks' }
     Write-Host ('        OK - crew.jsonc: memory=false, agents=' + @($co.agents).Count + ', tasks=' + @($co.tasks).Count)
-    Write-Host ('        KV-cache folder to look for later: ' + $cfg.offload_folder_name)
+    Write-Host ('        KV-cache folder: ' + $cfg.offload_folder_name)
     exit 0
 }
 Fail 'unknown AID_MODE'
